@@ -10,21 +10,32 @@ fn main() {
 }
 
 struct Model {
+    initialized: bool,
     grid: [[f32; GRID_COLS]; GRID_ROWS],
 }
 
 fn model(_app: &App) -> Model {
     Model {
+        initialized: false,
         grid: [[0.0; GRID_COLS]; GRID_ROWS],
     }
 }
 
 fn update(_app: &App, model: &mut Model, _update: Update) {
+    if model.initialized {
+        return;
+    }
+    model.initialized = true;
     // for row in &mut model.grid {
     //     for radians in row {
     //         *radians += PI/60.0;
     //     }
     // }
+    for (row_i, row) in model.grid.iter_mut().enumerate() {
+        for (_col_i, radians) in row.iter_mut().enumerate() {
+            *radians = ((row_i as f32) / (GRID_ROWS as f32)) * PI;
+        }
+    }
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
@@ -48,10 +59,9 @@ fn view(app: &App, model: &Model, frame: Frame) {
                 .radius(2.0)
                 .color(BLACK);
 
-            // Visulaize flow direction of the cell
-            let new_rads = ((row_i as f32) / (GRID_ROWS as f32)) * PI;
-            let arrow_end_x = cell_cx + (cell_w / 2.0) * new_rads.cos();
-            let arrow_end_y = cell_cy + (cell_h / 2.0) * new_rads.sin();
+            // Visualize flow direction of the cell
+            let arrow_end_x = cell_cx + (cell_w / 2.0) * radians.cos();
+            let arrow_end_y = cell_cy + (cell_h / 2.0) * radians.sin();
             draw.line()
                 .points(vec2(cell_cx, cell_cy), vec2(arrow_end_x, arrow_end_y))
                 .weight(1.0)
