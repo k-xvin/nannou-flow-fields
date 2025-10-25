@@ -6,36 +6,42 @@ const GRID_ROWS: usize = 20;
 
 fn main() {
     println!("hello");
-    nannou::app(model).update(update) .simple_window(view).run();
+    nannou::app(model).update(update).simple_window(view).run();
 }
 
 struct Model {
-    initialized: bool,
-    grid: [[f32; GRID_COLS]; GRID_ROWS],
+    grid: [[f32; GRID_COLS]; GRID_ROWS], // Assumes bottom left is 0,0 for the grid
+    points: Vec<Vec2>,
 }
 
-fn model(_app: &App) -> Model {
+fn model(app: &App) -> Model {
+    let mut grid = [[0.0; GRID_COLS]; GRID_ROWS];
+    for (row_i, row) in grid.iter_mut().enumerate() {
+        for (_col_i, radians) in row.iter_mut().enumerate() {
+            *radians = ((row_i as f32) / (GRID_ROWS as f32)) * PI;
+        }
+    }
+
+    let win = app.window_rect();
+    let mut points = Vec::new();
+    for _ in 0..100 {
+        let x = win.left() + random::<f32>() * win.w();
+        let y = win.bottom() + random::<f32>() * win.h();
+        points.push(pt2(x, y));
+    }
+
     Model {
-        initialized: false,
-        grid: [[0.0; GRID_COLS]; GRID_ROWS],
+        grid,
+        points,
     }
 }
 
-fn update(_app: &App, model: &mut Model, _update: Update) {
-    if model.initialized {
-        return;
-    }
-    model.initialized = true;
+fn update(_app: &App, _model: &mut Model, _update: Update) {
     // for row in &mut model.grid {
     //     for radians in row {
     //         *radians += PI/60.0;
     //     }
     // }
-    for (row_i, row) in model.grid.iter_mut().enumerate() {
-        for (_col_i, radians) in row.iter_mut().enumerate() {
-            *radians = ((row_i as f32) / (GRID_ROWS as f32)) * PI;
-        }
-    }
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
@@ -48,17 +54,39 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     visualize_flowfield(&draw, model, &win, cell_w, cell_h);
 
+    let step_len = 1.0;
+    for p in &model.points {
+        let mut last_point = p.clone();
+        for _step in 0..100 {
+            // Shift coordinates so bottom left is 0,0 to determine the position in the grid
+            let row = (((last_point.y + (win.h() / 2.0)) / cell_h) as usize).min(GRID_ROWS - 1);
+            let col = (((last_point.x + (win.w() / 2.0)) / cell_w) as usize).min(GRID_COLS - 1);
+
+            // Get the angle at (row, column)
+            let angle = model.grid[row][col];
+
+            // Step the line in the direction of the angle
+            let next_point = last_point + pt2(step_len * angle.cos(), step_len * angle.sin());
+            draw.line().points(last_point, next_point).weight(3.0).caps_round();
+
+            // Save new point
+            last_point = next_point;
+        }
+    }
+
     draw.to_frame(app, &frame).unwrap();
 }
 
 /// Draw arrows showing the direction of each point in the flow field
+#[allow(dead_code)]
 fn visualize_flowfield(draw: &Draw, model: &Model, win: &Rect, cell_w: f32, cell_h: f32) {
     for (row_i, row) in model.grid.iter().enumerate() {
         for (col_i, radians) in row.iter().enumerate() {
-            let cell_top_left_x = win.left() + (cell_w * col_i as f32);
-            let cell_top_left_y = win.top() - (cell_h * row_i as f32);
-            let cell_cx = cell_top_left_x + cell_w / 2.0;
-            let cell_cy = cell_top_left_y - cell_h / 2.0;
+            // Create grid where bottom left is 0,0
+            let cell_bottom_left_x = win.left() + (cell_w * col_i as f32);
+            let cell_bottom_left_y = win.bottom() + (cell_h * row_i as f32);
+            let cell_cx = cell_bottom_left_x + cell_w / 2.0;
+            let cell_cy = cell_bottom_left_y + cell_h / 2.0;
 
             // Visualize the center of a cell
             draw.ellipse()
@@ -70,10 +98,9 @@ fn visualize_flowfield(draw: &Draw, model: &Model, win: &Rect, cell_w: f32, cell
             let arrow_end_x = cell_cx + (cell_w / 2.0) * radians.cos();
             let arrow_end_y = cell_cy + (cell_h / 2.0) * radians.sin();
             draw.line()
-                .points(vec2(cell_cx, cell_cy), vec2(arrow_end_x, arrow_end_y))
+                .points(pt2(cell_cx, cell_cy), pt2(arrow_end_x, arrow_end_y))
                 .weight(1.0)
                 .color(RED);
         }
     }
 }
-
