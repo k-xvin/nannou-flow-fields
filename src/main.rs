@@ -46,6 +46,13 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     draw.background().color(WHITE);
 
+    visualize_flowfield(&draw, model, &win, cell_w, cell_h);
+
+    draw.to_frame(app, &frame).unwrap();
+}
+
+/// Draw arrows showing the direction of each point in the flow field
+fn visualize_flowfield(draw: &Draw, model: &Model, win: &Rect, cell_w: f32, cell_h: f32) {
     for (row_i, row) in model.grid.iter().enumerate() {
         for (col_i, radians) in row.iter().enumerate() {
             let cell_top_left_x = win.left() + (cell_w * col_i as f32);
@@ -68,6 +75,5 @@ fn view(app: &App, model: &Model, frame: Frame) {
                 .color(RED);
         }
     }
-
-    draw.to_frame(app, &frame).unwrap();
 }
+
