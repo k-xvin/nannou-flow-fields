@@ -11,6 +11,8 @@ fn main() {
 struct Model {
     grid: [[f32; GRID_COLS]; GRID_ROWS], // Assumes bottom left is 0,0 for the grid
     points: Vec<Vec2>,
+    cell_w: f32,
+    cell_h: f32,
 }
 
 fn model(app: &App) -> Model {
@@ -29,9 +31,14 @@ fn model(app: &App) -> Model {
         points.push(pt2(x, y));
     }
 
+    let cell_w = win.w() / GRID_COLS as f32;
+    let cell_h = win.h() / GRID_ROWS as f32;
+
     Model {
         grid,
         points,
+        cell_w,
+        cell_h,
     }
 }
 
@@ -45,13 +52,11 @@ fn update(_app: &App, _model: &mut Model, _update: Update) {
 
 fn view(app: &App, model: &Model, frame: Frame) {
     let win = app.window_rect();
-    let cell_w = win.w() / GRID_COLS as f32;
-    let cell_h = win.h() / GRID_ROWS as f32;
     let draw = app.draw();
 
     draw.background().color(WHITE);
 
-    visualize_flowfield(&draw, model, &win, cell_w, cell_h);
+    visualize_flowfield(&draw, model, &win, model.cell_w, model.cell_h);
 
     const NUM_STEPS: usize = 100;
     let mut points_to_draw = [pt2(0.0, 0.0); NUM_STEPS];
@@ -64,8 +69,8 @@ fn view(app: &App, model: &Model, frame: Frame) {
         for step in 1..NUM_STEPS {
             let last_point = points_to_draw[step-1];
             // Shift coordinates so bottom left is (0, 0) in order to determine the position in the grid
-            let row = (((last_point.y + (win.h() / 2.0)) / cell_h) as usize).min(GRID_ROWS - 1);
-            let col = (((last_point.x + (win.w() / 2.0)) / cell_w) as usize).min(GRID_COLS - 1);
+            let row = (((last_point.y + (win.h() / 2.0)) / model.cell_h) as usize).min(GRID_ROWS - 1);
+            let col = (((last_point.x + (win.w() / 2.0)) / model.cell_w) as usize).min(GRID_COLS - 1);
 
             // Get the angle at (row, column)
             let angle = model.grid[row][col];
