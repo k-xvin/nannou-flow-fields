@@ -1,4 +1,3 @@
-extern crate nannou;
 use nannou::prelude::*;
 
 const GRID_COLS: usize = 20;
@@ -37,11 +36,11 @@ fn model(app: &App) -> Model {
 }
 
 fn update(_app: &App, _model: &mut Model, _update: Update) {
-    // for row in &mut model.grid {
-    //     for radians in row {
-    //         *radians += PI/60.0;
-    //     }
-    // }
+    for row in &mut _model.grid {
+        for radians in row {
+            *radians += PI/60.0;
+        }
+    }
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
@@ -54,11 +53,17 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     visualize_flowfield(&draw, model, &win, cell_w, cell_h);
 
+    const NUM_STEPS: usize = 100;
+    let mut points_to_draw = [pt2(0.0, 0.0); NUM_STEPS];
     let step_len = 1.0;
     for p in &model.points {
-        let mut last_point = p.clone();
-        for _step in 0..100 {
-            // Shift coordinates so bottom left is 0,0 to determine the position in the grid
+        // Set up all points to draw, with p as the "start" point for the line
+        points_to_draw[0] = *p; // Copy contents
+
+        // Calculate all the points for this line
+        for step in 1..NUM_STEPS {
+            let last_point = points_to_draw[step-1];
+            // Shift coordinates so bottom left is (0, 0) in order to determine the position in the grid
             let row = (((last_point.y + (win.h() / 2.0)) / cell_h) as usize).min(GRID_ROWS - 1);
             let col = (((last_point.x + (win.w() / 2.0)) / cell_w) as usize).min(GRID_COLS - 1);
 
@@ -67,11 +72,13 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
             // Step the line in the direction of the angle
             let next_point = last_point + pt2(step_len * angle.cos(), step_len * angle.sin());
-            draw.line().points(last_point, next_point).weight(3.0).caps_round();
 
             // Save new point
-            last_point = next_point;
+            points_to_draw[step] = next_point;
         }
+
+        // Draw the polyline
+        draw.polyline().weight(3.0).points(points_to_draw);
     }
 
     draw.to_frame(app, &frame).unwrap();
