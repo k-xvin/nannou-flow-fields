@@ -53,16 +53,6 @@ fn model(app: &App) -> Model {
         } 
     }
 
-    for (row_i, row) in vector_grid.iter_mut().enumerate() {
-        for (col_i, radians) in row.iter_mut().enumerate() {
-            let x = (col_i as f64) * 0.005;
-            let y = (row_i as f64) * 0.005;
-            let noise_val = noise.get([x, y]) as f32;
-            // Noise is between -1.0 and 1.0, so scale it to a radian value between -2PI and 2PI
-            *radians = noise_val * 2.0 * PI;
-        } 
-    }
-
     let win = app.window_rect();
     let mut lines = Vec::new();
     for _ in 0..NUM_POINTS {
