@@ -14,17 +14,44 @@ fn main() {
 
 struct Model {
     noise: Perlin,
-    grid: [[f32; GRID_COLS]; GRID_ROWS], // Assumes bottom left is 0,0 for the grid
-    lines: Vec<[Point2; NUM_STEPS]>,
+    // Assumes bottom left is 0,0 for the grid
+    // Stores the vector at each point in the grid in radians
+    vector_grid: [[f32; GRID_COLS]; GRID_ROWS],
+    // Stores the scaled x,y values used for noise calculations at each point in the grid
+    scaled_grid: [[DVec2; GRID_COLS]; GRID_ROWS],
+    lines: Vec<[Vec2; NUM_STEPS]>,
     cell_w: f32,
     cell_h: f32,
+    time: f32,
 }
 
 fn model(app: &App) -> Model {
     let noise = Perlin::new().set_seed(1);
+    let time: f32 = 0.0;
 
-    let mut grid = [[0.0; GRID_COLS]; GRID_ROWS];
-    for (row_i, row) in grid.iter_mut().enumerate() {
+    let mut scaled_grid = [[dvec2(0.0, 0.0); GRID_COLS]; GRID_ROWS];
+    for (row_i, row) in scaled_grid.iter_mut().enumerate() {
+        for (col_i, point) in row.iter_mut().enumerate() {
+            *point = dvec2(row_i as f64 * 0.005, col_i as f64 * 0.005);
+        }
+    }
+
+    let mut vector_grid = [[0.0; GRID_COLS]; GRID_ROWS];
+    for (row_i, row) in vector_grid.iter_mut().enumerate() {
+        for (col_i, radians) in row.iter_mut().enumerate() {
+            let noise_val = noise.get(
+                [
+                scaled_grid[row_i][col_i].x,
+                scaled_grid[row_i][col_i].y,
+                time as f64,
+                ]
+            ) as f32;
+            // Noise is between -1.0 and 1.0, so scale it to a radian value between -2PI and 2PI
+            *radians = noise_val * 2.0 * PI;
+        } 
+    }
+
+    for (row_i, row) in vector_grid.iter_mut().enumerate() {
         for (col_i, radians) in row.iter_mut().enumerate() {
             let x = (col_i as f64) * 0.005;
             let y = (row_i as f64) * 0.005;
@@ -49,10 +76,12 @@ fn model(app: &App) -> Model {
 
     Model {
         noise,
-        grid,
+        vector_grid,
+        scaled_grid,
         lines,
         cell_w,
         cell_h,
+        time,
     }
 }
 
@@ -60,11 +89,15 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     let win = app.window_rect();
 
     // Update flowfield vectors
-    for (row_i, row) in model.grid.iter_mut().enumerate() {
+    for (row_i, row) in model.vector_grid.iter_mut().enumerate() {
         for (col_i, radians) in row.iter_mut().enumerate() {
-            let x = (col_i as f64) * 0.005;
-            let y = (row_i as f64) * 0.005;
-            let noise_val = model.noise.get([x, y, app.elapsed_frames() as f64 * 0.005]) as f32;
+            let noise_val = model.noise.get(
+                [
+                model.scaled_grid[row_i][col_i].x,
+                model.scaled_grid[row_i][col_i].y,
+                model.time as f64,
+                ]
+            ) as f32;
             // Noise is between -1.0 and 1.0, so scale it to a radian value between -2PI and 2PI
             *radians = noise_val * 2.0 * PI;
         } 
@@ -80,7 +113,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             let col = (((last_point.x + (win.w() / 2.0)) / model.cell_w) as usize).min(GRID_COLS - 1);
 
             // Get the angle at (row, column)
-            let angle = model.grid[row][col];
+            let angle = model.vector_grid[row][col];
 
             // Step the line in the direction of the angle
             let next_point = last_point + pt2(STEP_LEN * angle.cos(), STEP_LEN * angle.sin());
@@ -89,11 +122,11 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             line[step] = next_point;
         }
     }
-    return;
+
+    model.time += 0.01;
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
-    let win = app.window_rect();
     let draw = app.draw();
 
     draw.background().color(WHITE);
@@ -112,7 +145,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
 /// Draw arrows showing the direction of each point in the flow field
 #[allow(dead_code)]
 fn visualize_flowfield(draw: &Draw, model: &Model, win: &Rect, cell_w: f32, cell_h: f32) {
-    for (row_i, row) in model.grid.iter().enumerate() {
+    for (row_i, row) in model.vector_grid.iter().enumerate() {
         for (col_i, radians) in row.iter().enumerate() {
             // Create grid where bottom left is 0,0
             let cell_bottom_left_x = win.left() + (cell_w * col_i as f32);
