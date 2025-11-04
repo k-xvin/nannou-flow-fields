@@ -1,7 +1,8 @@
 use nannou::prelude::*;
+use nannou::noise::*;
 
-const GRID_COLS: usize = 20;
-const GRID_ROWS: usize = 20;
+const GRID_COLS: usize = 200;
+const GRID_ROWS: usize = 200;
 
 fn main() {
     println!("hello");
@@ -9,6 +10,7 @@ fn main() {
 }
 
 struct Model {
+    noise: Perlin,
     grid: [[f32; GRID_COLS]; GRID_ROWS], // Assumes bottom left is 0,0 for the grid
     points: Vec<Vec2>,
     cell_w: f32,
@@ -16,16 +18,24 @@ struct Model {
 }
 
 fn model(app: &App) -> Model {
+    let noise = Perlin::new().set_seed(1);
+
     let mut grid = [[0.0; GRID_COLS]; GRID_ROWS];
     for (row_i, row) in grid.iter_mut().enumerate() {
-        for (_col_i, radians) in row.iter_mut().enumerate() {
-            *radians = ((row_i as f32) / (GRID_ROWS as f32)) * PI;
-        }
+        for (col_i, radians) in row.iter_mut().enumerate() {
+            // *radians = ((row_i as f32) / (GRID_ROWS as f32)) * PI;
+
+            let x = (col_i as f64) * 0.005;
+            let y = (row_i as f64) * 0.005;
+            let noise_val = noise.get([x, y]) as f32;
+            // Noise is between -1.0 and 1.0, so scale it to a radian value between -2PI and 2PI
+            *radians = noise_val * 2.0 * PI;
+        } 
     }
 
     let win = app.window_rect();
     let mut points = Vec::new();
-    for _ in 0..100 {
+    for _ in 0..1000 {
         let x = win.left() + random::<f32>() * win.w();
         let y = win.bottom() + random::<f32>() * win.h();
         points.push(pt2(x, y));
@@ -35,6 +45,7 @@ fn model(app: &App) -> Model {
     let cell_h = win.h() / GRID_ROWS as f32;
 
     Model {
+        noise,
         grid,
         points,
         cell_w,
@@ -43,6 +54,7 @@ fn model(app: &App) -> Model {
 }
 
 fn update(_app: &App, _model: &mut Model, _update: Update) {
+    return;
     for row in &mut _model.grid {
         for radians in row {
             *radians += PI/60.0;
@@ -56,7 +68,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     draw.background().color(WHITE);
 
-    visualize_flowfield(&draw, model, &win, model.cell_w, model.cell_h);
+    // visualize_flowfield(&draw, model, &win, model.cell_w, model.cell_h);
 
     const NUM_STEPS: usize = 100;
     let mut points_to_draw = [pt2(0.0, 0.0); NUM_STEPS];
@@ -83,7 +95,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
         }
 
         // Draw the polyline
-        draw.polyline().weight(3.0).points(points_to_draw);
+        draw.polyline().weight(2.0).caps_round().points(points_to_draw);
     }
 
     draw.to_frame(app, &frame).unwrap();
