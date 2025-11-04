@@ -4,8 +4,10 @@ use nannou::noise::*;
 const GRID_COLS: usize = 200;
 const GRID_ROWS: usize = 200;
 const NUM_POINTS: usize = 4000;
-const NUM_STEPS: usize = 100;
-const STEP_LEN: f32 = 1.0;
+const NUM_STEPS: usize = 20;
+const STEP_LEN: f32 = 5.0;
+const NOISE_SCALE_FACTOR: f64 = 0.005;
+const TIME_STEP: f32 = 0.01;
 
 fn main() {
     println!("hello");
@@ -32,7 +34,7 @@ fn model(app: &App) -> Model {
     let mut scaled_grid = [[dvec2(0.0, 0.0); GRID_COLS]; GRID_ROWS];
     for (row_i, row) in scaled_grid.iter_mut().enumerate() {
         for (col_i, point) in row.iter_mut().enumerate() {
-            *point = dvec2(row_i as f64 * 0.005, col_i as f64 * 0.005);
+            *point = dvec2(row_i as f64 * NOISE_SCALE_FACTOR, col_i as f64 * NOISE_SCALE_FACTOR);
         }
     }
 
@@ -123,7 +125,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         }
     }
 
-    model.time += 0.01;
+    model.time += TIME_STEP;
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
