@@ -3,6 +3,9 @@ use nannou::noise::*;
 
 const GRID_COLS: usize = 200;
 const GRID_ROWS: usize = 200;
+const NUM_POINTS: usize = 4000;
+const NUM_STEPS: usize = 100;
+const STEP_LEN: f32 = 1.0;
 
 fn main() {
     println!("hello");
@@ -12,7 +15,7 @@ fn main() {
 struct Model {
     noise: Perlin,
     grid: [[f32; GRID_COLS]; GRID_ROWS], // Assumes bottom left is 0,0 for the grid
-    points: Vec<Vec2>,
+    lines: Vec<[Point2; NUM_STEPS]>,
     cell_w: f32,
     cell_h: f32,
 }
@@ -23,8 +26,6 @@ fn model(app: &App) -> Model {
     let mut grid = [[0.0; GRID_COLS]; GRID_ROWS];
     for (row_i, row) in grid.iter_mut().enumerate() {
         for (col_i, radians) in row.iter_mut().enumerate() {
-            // *radians = ((row_i as f32) / (GRID_ROWS as f32)) * PI;
-
             let x = (col_i as f64) * 0.005;
             let y = (row_i as f64) * 0.005;
             let noise_val = noise.get([x, y]) as f32;
@@ -34,11 +35,13 @@ fn model(app: &App) -> Model {
     }
 
     let win = app.window_rect();
-    let mut points = Vec::new();
-    for _ in 0..1000 {
-        let x = win.left() + random::<f32>() * win.w();
-        let y = win.bottom() + random::<f32>() * win.h();
-        points.push(pt2(x, y));
+    let mut lines = Vec::new();
+    for _ in 0..NUM_POINTS {
+        let start_x = win.left() + random::<f32>() * win.w();
+        let start_y = win.bottom() + random::<f32>() * win.h();
+        let mut line = [pt2(0.0, 0.0); NUM_STEPS];
+        line[0] = pt2(start_x, start_y);
+        lines.push(line);
     }
 
     let cell_w = win.w() / GRID_COLS as f32;
@@ -47,19 +50,46 @@ fn model(app: &App) -> Model {
     Model {
         noise,
         grid,
-        points,
+        lines,
         cell_w,
         cell_h,
     }
 }
 
-fn update(_app: &App, _model: &mut Model, _update: Update) {
-    return;
-    for row in &mut _model.grid {
-        for radians in row {
-            *radians += PI/60.0;
+fn update(app: &App, model: &mut Model, _update: Update) {
+    let win = app.window_rect();
+
+    // Update flowfield vectors
+    for (row_i, row) in model.grid.iter_mut().enumerate() {
+        for (col_i, radians) in row.iter_mut().enumerate() {
+            let x = (col_i as f64) * 0.005;
+            let y = (row_i as f64) * 0.005;
+            let noise_val = model.noise.get([x, y, app.elapsed_frames() as f64 * 0.005]) as f32;
+            // Noise is between -1.0 and 1.0, so scale it to a radian value between -2PI and 2PI
+            *radians = noise_val * 2.0 * PI;
+        } 
+    }
+
+    // Calculate new positions of each line to draw since flowfield's vectors are now updated
+    for line in &mut model.lines {
+        for step in 1..NUM_STEPS {
+            let last_point = line[step - 1];
+
+            // Shift coordinates so bottom left is (0, 0) in order to determine the position in the grid
+            let row = (((last_point.y + (win.h() / 2.0)) / model.cell_h) as usize).min(GRID_ROWS - 1);
+            let col = (((last_point.x + (win.w() / 2.0)) / model.cell_w) as usize).min(GRID_COLS - 1);
+
+            // Get the angle at (row, column)
+            let angle = model.grid[row][col];
+
+            // Step the line in the direction of the angle
+            let next_point = last_point + pt2(STEP_LEN * angle.cos(), STEP_LEN * angle.sin());
+
+            // Save new point
+            line[step] = next_point;
         }
     }
+    return;
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
@@ -70,32 +100,10 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     // visualize_flowfield(&draw, model, &win, model.cell_w, model.cell_h);
 
-    const NUM_STEPS: usize = 100;
-    let mut points_to_draw = [pt2(0.0, 0.0); NUM_STEPS];
-    let step_len = 1.0;
-    for p in &model.points {
-        // Set up all points to draw, with p as the "start" point for the line
-        points_to_draw[0] = *p; // Copy contents
-
-        // Calculate all the points for this line
-        for step in 1..NUM_STEPS {
-            let last_point = points_to_draw[step-1];
-            // Shift coordinates so bottom left is (0, 0) in order to determine the position in the grid
-            let row = (((last_point.y + (win.h() / 2.0)) / model.cell_h) as usize).min(GRID_ROWS - 1);
-            let col = (((last_point.x + (win.w() / 2.0)) / model.cell_w) as usize).min(GRID_COLS - 1);
-
-            // Get the angle at (row, column)
-            let angle = model.grid[row][col];
-
-            // Step the line in the direction of the angle
-            let next_point = last_point + pt2(step_len * angle.cos(), step_len * angle.sin());
-
-            // Save new point
-            points_to_draw[step] = next_point;
-        }
-
-        // Draw the polyline
-        draw.polyline().weight(2.0).caps_round().points(points_to_draw);
+    // Draw each line in the flowfield
+    for line in &model.lines {
+        // .copied() is an iterator that creates an owned copy of each Point2 as it iterates
+        draw.polyline().weight(1.0).caps_round().points(line.iter().copied());
     }
 
     draw.to_frame(app, &frame).unwrap();
