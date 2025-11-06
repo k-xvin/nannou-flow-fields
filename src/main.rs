@@ -1,8 +1,8 @@
 use nannou::prelude::*;
 use nannou::noise::*;
 
-const GRID_COLS: usize = 200;
-const GRID_ROWS: usize = 200;
+const GRID_COLS: usize = 400;
+const GRID_ROWS: usize = 400;
 const NUM_POINTS: usize = 4000;
 const NUM_STEPS: usize = 20;
 const STEP_LEN: f32 = 5.0;
@@ -18,9 +18,9 @@ struct Model {
     noise: Perlin,
     // Assumes bottom left is 0,0 for the grid
     // Stores the vector at each point in the grid in radians
-    vector_grid: [[f32; GRID_COLS]; GRID_ROWS],
+    vector_grid: Box<[[f32; GRID_COLS]; GRID_ROWS]>,
     // Stores the scaled x,y values used for noise calculations at each point in the grid
-    scaled_grid: [[DVec2; GRID_COLS]; GRID_ROWS],
+    scaled_grid: Box<[[DVec2; GRID_COLS]; GRID_ROWS]>,
     lines: Vec<[Vec2; NUM_STEPS]>,
     cell_w: f32,
     cell_h: f32,
@@ -31,14 +31,14 @@ fn model(app: &App) -> Model {
     let noise = Perlin::new().set_seed(1);
     let time: f32 = 0.0;
 
-    let mut scaled_grid = [[dvec2(0.0, 0.0); GRID_COLS]; GRID_ROWS];
+    let mut scaled_grid = Box::new([[dvec2(0.0, 0.0); GRID_COLS]; GRID_ROWS]);
     for (row_i, row) in scaled_grid.iter_mut().enumerate() {
         for (col_i, point) in row.iter_mut().enumerate() {
             *point = dvec2(row_i as f64 * NOISE_SCALE_FACTOR, col_i as f64 * NOISE_SCALE_FACTOR);
         }
     }
 
-    let mut vector_grid = [[0.0; GRID_COLS]; GRID_ROWS];
+    let mut vector_grid = Box::new([[0.0; GRID_COLS]; GRID_ROWS]);
     for (row_i, row) in vector_grid.iter_mut().enumerate() {
         for (col_i, radians) in row.iter_mut().enumerate() {
             let noise_val = noise.get(
