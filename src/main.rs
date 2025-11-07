@@ -83,37 +83,70 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     // Update flowfield vectors
     for (row_i, row) in model.vector_grid.iter_mut().enumerate() {
         for (col_i, radians) in row.iter_mut().enumerate() {
-            let noise_val = model.noise.get(
-                [
+            let noise_val = model.noise.get([
                 model.scaled_grid[row_i][col_i].x,
                 model.scaled_grid[row_i][col_i].y,
                 model.time as f64,
-                ]
-            ) as f32;
+            ]) as f32;
             // Noise is between -1.0 and 1.0, so scale it to a radian value between -2PI and 2PI
             *radians = noise_val * 2.0 * PI;
         } 
     }
 
     // Calculate new positions of each line to draw since flowfield's vectors are now updated
-    for line in &mut model.lines {
+    // Multithreaded version is only ~20% faster than single threaded
+    const NUM_THREADS: usize = 4;
+    let chunks = model.lines.chunks_mut(NUM_POINTS / NUM_THREADS);
+    thread::scope(|s| {
+        // Scoped threads automatically join at the end of scope
+        for chunk in chunks {
+            s.spawn(|| {
+                for line in chunk {
         for step in 1..NUM_STEPS {
             let last_point = line[step - 1];
 
             // Shift coordinates so bottom left is (0, 0) in order to determine the position in the grid
-            let row = (((last_point.y + (win.h() / 2.0)) / model.cell_h) as usize).min(GRID_ROWS - 1);
-            let col = (((last_point.x + (win.w() / 2.0)) / model.cell_w) as usize).min(GRID_COLS - 1);
+                        let row = (((last_point.y + (win.h() / 2.0)) / model.cell_h) as usize)
+                            .min(GRID_ROWS - 1);
+                        let col = (((last_point.x + (win.w() / 2.0)) / model.cell_w) as usize)
+                            .min(GRID_COLS - 1);
 
             // Get the angle at (row, column)
             let angle = model.vector_grid[row][col];
 
             // Step the line in the direction of the angle
-            let next_point = last_point + pt2(STEP_LEN * angle.cos(), STEP_LEN * angle.sin());
+                        let next_point =
+                            last_point + pt2(STEP_LEN * angle.cos(), STEP_LEN * angle.sin());
 
             // Save new point
             line[step] = next_point;
         }
     }
+            });
+        }
+    });
+
+    // Pure single threaded version
+    // for line in &mut model.lines {
+    //     for step in 1..NUM_STEPS {
+    //         let last_point = line[step - 1];
+
+    //         // Shift coordinates so bottom left is (0, 0) in order to determine the position in the grid
+    //         let row =
+    //             (((last_point.y + (win.h() / 2.0)) / model.cell_h) as usize).min(GRID_ROWS - 1);
+    //         let col =
+    //             (((last_point.x + (win.w() / 2.0)) / model.cell_w) as usize).min(GRID_COLS - 1);
+
+    //         // Get the angle at (row, column)
+    //         let angle = model.vector_grid[row][col];
+
+    //         // Step the line in the direction of the angle
+    //         let next_point = last_point + pt2(STEP_LEN * angle.cos(), STEP_LEN * angle.sin());
+
+    //         // Save new point
+    //         line[step] = next_point;
+    //     }
+    // }
 
     model.time += TIME_STEP;
 }
