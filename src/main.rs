@@ -1,5 +1,6 @@
-use nannou::prelude::*;
 use nannou::noise::*;
+use nannou::prelude::*;
+use std::thread;
 
 const GRID_COLS: usize = 400;
 const GRID_ROWS: usize = 400;
@@ -34,20 +35,21 @@ fn model(app: &App) -> Model {
     let mut scaled_grid = Box::new([[dvec2(0.0, 0.0); GRID_COLS]; GRID_ROWS]);
     for (row_i, row) in scaled_grid.iter_mut().enumerate() {
         for (col_i, point) in row.iter_mut().enumerate() {
-            *point = dvec2(row_i as f64 * NOISE_SCALE_FACTOR, col_i as f64 * NOISE_SCALE_FACTOR);
+            *point = dvec2(
+                row_i as f64 * NOISE_SCALE_FACTOR,
+                col_i as f64 * NOISE_SCALE_FACTOR,
+            );
         }
     }
 
     let mut vector_grid = Box::new([[0.0; GRID_COLS]; GRID_ROWS]);
     for (row_i, row) in vector_grid.iter_mut().enumerate() {
         for (col_i, radians) in row.iter_mut().enumerate() {
-            let noise_val = noise.get(
-                [
+            let noise_val = noise.get([
                 scaled_grid[row_i][col_i].x,
                 scaled_grid[row_i][col_i].y,
                 time as f64,
-                ]
-            ) as f32;
+            ]) as f32;
             // Noise is between -1.0 and 1.0, so scale it to a radian value between -2PI and 2PI
             *radians = noise_val * 2.0 * PI;
         } 
@@ -78,24 +80,35 @@ fn model(app: &App) -> Model {
 }
 
 fn update(app: &App, model: &mut Model, _update: Update) {
+    let start = std::time::Instant::now();
     let win = app.window_rect();
+    const NUM_THREADS: usize = 4;
 
     // Update flowfield vectors
-    for (row_i, row) in model.vector_grid.iter_mut().enumerate() {
+    let noise = &model.noise;
+    let scaled_grid = &model.scaled_grid;
+    let time = model.time;
+    let flowfield_chunks = model.vector_grid.chunks_mut(GRID_ROWS / NUM_THREADS);
+    thread::scope(|s| {
+        for (chunk_i, chunk) in flowfield_chunks.enumerate() {
+            s.spawn(move || {
+                for (row_i, row) in chunk.iter_mut().enumerate() {
         for (col_i, radians) in row.iter_mut().enumerate() {
-            let noise_val = model.noise.get([
-                model.scaled_grid[row_i][col_i].x,
-                model.scaled_grid[row_i][col_i].y,
-                model.time as f64,
+                        let nonchunk_row = row_i + chunk_i * (GRID_ROWS / NUM_THREADS);
+                        let noise_val = noise.get([
+                            scaled_grid[nonchunk_row][col_i].x,
+                            scaled_grid[nonchunk_row][col_i].y,
+                            time as f64,
             ]) as f32;
             // Noise is between -1.0 and 1.0, so scale it to a radian value between -2PI and 2PI
             *radians = noise_val * 2.0 * PI;
         } 
     }
+            });
+        }
+    });
 
     // Calculate new positions of each line to draw since flowfield's vectors are now updated
-    // Multithreaded version is only ~20% faster than single threaded
-    const NUM_THREADS: usize = 4;
     let chunks = model.lines.chunks_mut(NUM_POINTS / NUM_THREADS);
     thread::scope(|s| {
         // Scoped threads automatically join at the end of scope
@@ -126,29 +139,8 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         }
     });
 
-    // Pure single threaded version
-    // for line in &mut model.lines {
-    //     for step in 1..NUM_STEPS {
-    //         let last_point = line[step - 1];
-
-    //         // Shift coordinates so bottom left is (0, 0) in order to determine the position in the grid
-    //         let row =
-    //             (((last_point.y + (win.h() / 2.0)) / model.cell_h) as usize).min(GRID_ROWS - 1);
-    //         let col =
-    //             (((last_point.x + (win.w() / 2.0)) / model.cell_w) as usize).min(GRID_COLS - 1);
-
-    //         // Get the angle at (row, column)
-    //         let angle = model.vector_grid[row][col];
-
-    //         // Step the line in the direction of the angle
-    //         let next_point = last_point + pt2(STEP_LEN * angle.cos(), STEP_LEN * angle.sin());
-
-    //         // Save new point
-    //         line[step] = next_point;
-    //     }
-    // }
-
     model.time += TIME_STEP;
+    println!("Update took {:?}", start.elapsed());
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
